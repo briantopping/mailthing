@@ -1,0 +1,29 @@
+<?xml version='1.0'?><?xml-stylesheet type='text/xsl' href='http://whois.arin.net/xsl/website.xsl' ?>
+<net xmlns="http://www.arin.net/whoisrws/core/v1" xmlns:ns2="http://www.arin.net/whoisrws/rdns/v1"
+     xmlns:ns3="http://www.arin.net/whoisrws/netref/v2" termsOfUse="https://www.arin.net/whois_tou.html"
+     inaccuracyReportUrl="http://www.arin.net/public/whoisinaccuracy/index.xhtml">
+    <registrationDate>2012-10-02T00:30:56-04:00</registrationDate>
+    <ref>http://whois.arin.net/rest/net/NET-198-54-125-32-1</ref>
+    <customerRef name="Point Consultants  Consulting" handle="C03170766">http://whois.arin.net/rest/customer/C03170766
+    </customerRef>
+    <endAddress>198.54.125.63</endAddress>
+    <handle>NET-198-54-125-32-1</handle>
+    <name>POINT-CONSULTANTS-CONSULTING-NET1</name>
+    <netBlocks>
+        <netBlock>
+            <cidrLength>27</cidrLength>
+            <endAddress>198.54.125.63</endAddress>
+            <description>Reassigned</description>
+            <type>S</type>
+            <startAddress>198.54.125.32</startAddress>
+        </netBlock>
+    </netBlocks>
+    <originASes>
+        <originAS>AS30186</originAS>
+    </originASes>
+    <parentNetRef name="TOQEN-NET4" handle="NET-198-54-112-0-1">http://whois.arin.net/rest/net/NET-198-54-112-0-1
+    </parentNetRef>
+    <startAddress>198.54.125.32</startAddress>
+    <updateDate>2012-10-02T00:30:56-04:00</updateDate>
+    <version>4</version>
+</net>

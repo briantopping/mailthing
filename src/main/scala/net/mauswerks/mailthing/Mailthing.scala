@@ -1,11 +1,12 @@
 package net.mauswerks.mailthing
 
-import java.io.{FileInputStream, FileOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.io._
 import java.util.Date
 import javax.mail._
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
+import scala.io.{BufferedSource, Source}
 import scala.util.{Failure, Success, Try}
 
 /*
@@ -40,15 +41,19 @@ object Mailthing {
   }
 
   object Network {
-    def mask(l: Long, mask: Int) = (-1 ^ (1 << (32 - mask)) - 1) & l
+    def mask(l: Long, bits: Int) = (-1 ^ (1 << (32 - bits)) - 1) & l
 
     implicit def orderByNetwork[A <: Network]: Ordering[A] = Ordering.by(n => n.number)
 
     // create a /32 Network from a string
     def apply(s: String): Network = {
-      s.split("\\.").toList match {
-        case a :: b :: c :: d :: Nil =>
+      val NoMask = "(\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)".r
+      val Masked = "(\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)/(\\d+)".r
+      s match {
+        case NoMask(a,b,c,d) =>
           Network((a.toLong << 24) + (b.toLong << 16) + (c.toLong << 8) + d.toLong, 32)
+        case Masked(a,b,c,d,m) =>
+          Network((a.toLong << 24) + (b.toLong << 16) + (c.toLong << 8) + d.toLong, m.toInt)
       }
     }
 
@@ -142,7 +147,7 @@ object Mailthing {
    * @param newMap SortedMap of Network elements with a count of the number of hits recorded
    * @return SortedMap of CIDR blocks and hits within the block
    */
-  def merge(savedMap: NetworkMap, newMap: NetworkMap, matchBits: Int): NetworkMap = {
+  def merge(savedMap: NetworkMap, newMap: Map[Network, NetworkHistory], matchBits: Int): NetworkMap = {
     @tailrec
     def recur(merged: NetworkMap, mergeKeys: List[Network]): NetworkMap = {
       mergeKeys match {
@@ -172,8 +177,21 @@ object Mailthing {
     recur(savedMap, newMap.keys.toList)
   }
 
+  def importPostmapFormat(f: File): Map[Network, NetworkHistory] = {
+    val Pattern = "\\W*(\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+) REJECT (\\d+) .*".r
+    val source: BufferedSource = Source.fromFile(f)
+
+    var result: Map[Network, NetworkHistory] = Map.empty
+    source.getLines().foreach {
+      case Pattern(addr, count) => result += (Network(addr) -> NetworkHistory(count = count.toInt))
+      case s@_ => println( s"Could not parse '$s'" )
+    }
+    source.close()
+    result
+  }
+
   def main(args: Array[String]) {
-    case class Config(protocol: String = "imaps", server: String = "", username: String = "", password: String = "", folder: String = "", bits: Int = 23)
+    case class Config(protocol: String = "imaps", server: String = "", username: String = "", password: String = "", folder: String = "", bits: Int = 23, importFile: Option[File] = None, dryRun: Boolean = false, ignoreHistory: Boolean = false)
     val parser = new scopt.OptionParser[Config]("mailthing") {
       opt[String]('p', "protocol") action { (x, c) =>
         c.copy(protocol = x)
@@ -188,19 +206,33 @@ object Mailthing {
         c.copy(password = x) } text "account password"
       opt[String]('f', "folder") action { (x, c) =>
         c.copy(folder = x) } text "folder on server"
+      opt[File]('i', "import") valueName "<file>" action { (x, c) =>
+        c.copy(importFile = Some(x)) } text "import contents of file"
       opt[Int]('b', "bits") action { (x, c) =>
         c.copy(bits = x) } text "CIDR bits to match (default is 23)"
+      opt[Unit]('g', "ignoreHistory") action { (x, c) =>
+        c.copy(ignoreHistory = true) } text "Don't read history file"
+      opt[Unit]('d', "dryRun") action { (x, c) =>
+        c.copy(dryRun = true) } text "Dry run (don't save to history file)"
     }
 
     parser.parse(args, Config()) foreach { c =>
       val HISTORY_FILE_NAME: String = "history"
-      val savedMap: NetworkMap = deserializeFromDisk(HISTORY_FILE_NAME).getOrElse(TreeMap.empty)
-      val newMap: NetworkMap = processMailbox(c.protocol, c.server, c.username, c.password, c.folder, extractIpMap).getOrElse(TreeMap.empty)
+      val savedMap: NetworkMap = c.ignoreHistory match {
+        case true => TreeMap.empty
+        case false => deserializeFromDisk(HISTORY_FILE_NAME).getOrElse(TreeMap.empty)
+      }
+      val newMap: Map[Network, NetworkHistory] = c.importFile match {
+        case None => processMailbox(c.protocol, c.server, c.username, c.password, c.folder, extractIpMap).getOrElse(TreeMap.empty)
+        case Some(f) => importPostmapFormat(f)
+      }
       val merged = merge(savedMap, newMap, c.bits)
 
-      serializeToDisk(merged, HISTORY_FILE_NAME)
+      if (!c.dryRun) {
+        serializeToDisk(merged, HISTORY_FILE_NAME)
+      }
 
-      merged.keys.toList.sorted.foreach(key => println(s" $key REJECT ${merged(key).count} spam(s) from your network!"))
+      merged.keys.toList.sorted.foreach(key => println(s"$key REJECT ${merged(key).count} spam(s) from your network!"))
     }
   }
 }

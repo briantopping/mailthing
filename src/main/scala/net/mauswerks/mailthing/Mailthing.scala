@@ -23,9 +23,11 @@ import scala.util.{Failure, Success, Try}
  * have it delete the messages that it already processed.
  */
 object Mailthing {
+
   case class NetworkHistory(count: Int = 0, lastSeen: Date = new Date()) {
     def incr = NetworkHistory(count + 1, new Date())
   }
+
   type NetworkMap = TreeMap[Network, NetworkHistory]
 
   case class Network(number: Long, bits: Int) {
@@ -34,10 +36,10 @@ object Mailthing {
     def contains(that: Network) = bits <= that.bits && Network.mask(that.number, this.bits) == number
 
     override def toString: String =
-       s"${String.valueOf((number & 0xFF000000) >> 24)}" +
-      s".${String.valueOf((number & 0x00FF0000) >> 16)}" +
-      s".${String.valueOf((number & 0x0000FF00) >> 8)}" +
-      s".${String.valueOf(number & 0x000000FF)}/$bits"
+      s"${String.valueOf((number & 0xFF000000) >> 24)}" +
+        s".${String.valueOf((number & 0x00FF0000) >> 16)}" +
+        s".${String.valueOf((number & 0x0000FF00) >> 8)}" +
+        s".${String.valueOf(number & 0x000000FF)}/$bits"
   }
 
   object Network {
@@ -50,9 +52,9 @@ object Mailthing {
       val NoMask = "(\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)".r
       val Masked = "(\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)/(\\d+)".r
       s match {
-        case NoMask(a,b,c,d) =>
+        case NoMask(a, b, c, d) =>
           Network((a.toLong << 24) + (b.toLong << 16) + (c.toLong << 8) + d.toLong, 32)
-        case Masked(a,b,c,d,m) =>
+        case Masked(a, b, c, d, m) =>
           Network((a.toLong << 24) + (b.toLong << 16) + (c.toLong << 8) + d.toLong, m.toInt)
       }
     }
@@ -64,11 +66,13 @@ object Mailthing {
   }
 
   /**
-   * Regex parser for JavaMail Message objects. Finds "Recieved" headers, pulls the source IP, and populates a SortedMap
-   * @param msgs List of JavaMail Message objects
-   * @param result SortedMap of Network objects with hit counts as values
-   * @return the result parameter when the msgs list is empty
-   */
+    * Regex parser for JavaMail Message objects. Finds "Recieved" headers, pulls the source IP, and populates a
+    * SortedMap
+    *
+    * @param msgs   List of JavaMail Message objects
+    * @param result SortedMap of Network objects with hit counts as values
+    * @return the result parameter when the msgs list is empty
+    */
   @tailrec
   def extractIpMap(msgs: List[Message], result: NetworkMap = TreeMap.empty): NetworkMap = {
     def addHit(result: NetworkMap, binIp: Network): (Network, NetworkHistory) = {
@@ -98,7 +102,7 @@ object Mailthing {
     catch {
       case e: Exception => Failure(e)
     } finally {
-      ois.foreach { _.close() }
+      ois.foreach {_.close()}
     }
   }
 
@@ -110,7 +114,8 @@ object Mailthing {
     }
   }
 
-  def processMailbox(protocol: String, server: String, account: String, password: String, folderName: String, processor: (List[Message], NetworkMap) => NetworkMap): Try[NetworkMap] = {
+  def processMailbox(protocol: String, server: String, account: String, password: String, folderName: String,
+                     processor: (List[Message], NetworkMap) => NetworkMap): Try[NetworkMap] = {
     val props = System.getProperties
     props.setProperty("mail.store.protocol", protocol)
     props.setProperty("mail." + protocol + ".ssl.trust", server)
@@ -133,20 +138,22 @@ object Mailthing {
   }
 
   /**
-   * Aggregate CIDR blocks to get around spammers who rotate their IP addresses.
-   *
-   * This currently pays no attention to registry data because it's intentionally inaccurate when the ISP and the spammer
-   * collude. That said, we could easily start with the registry netblock instead of /32.
-   *
-   * Once the raw messages have been put into a map of the source address and hit count, apply the keys of that map
-   * sequentially to the result map. Critically, the result map is a reverse sorted map such that the head of the keys
-   * is always the largest (and closest) neighbor to the current key.
-   *
-   * Matches are always added to the result map starting with the count they had in the ipMap, which may be greater than 1.
-   *
-   * @param newMap SortedMap of Network elements with a count of the number of hits recorded
-   * @return SortedMap of CIDR blocks and hits within the block
-   */
+    * Aggregate CIDR blocks to get around spammers who rotate their IP addresses.
+    *
+    * This currently pays no attention to registry data because it's intentionally inaccurate when the ISP and the
+    * spammer
+    * collude. That said, we could easily start with the registry netblock instead of /32.
+    *
+    * Once the raw messages have been put into a map of the source address and hit count, apply the keys of that map
+    * sequentially to the result map. Critically, the result map is a reverse sorted map such that the head of the keys
+    * is always the largest (and closest) neighbor to the current key.
+    *
+    * Matches are always added to the result map starting with the count they had in the ipMap, which may be greater
+    * than 1.
+    *
+    * @param newMap SortedMap of Network elements with a count of the number of hits recorded
+    * @return SortedMap of CIDR blocks and hits within the block
+    */
   def merge(savedMap: NetworkMap, newMap: Map[Network, NetworkHistory], matchBits: Int): NetworkMap = {
     @tailrec
     def recur(merged: NetworkMap, mergeKeys: List[Network]): NetworkMap = {
@@ -163,7 +170,8 @@ object Mailthing {
               // if so, store the current count, delete the old head and add the new widened
               // head with the sum of the old count and the new network count.
               case Some(x) =>
-                val tuple: (Network, NetworkHistory) = Network(head, x) -> NetworkHistory(count = newMap(head).count + merged(item).count)
+                val tuple: (Network, NetworkHistory) = Network(head, x) -> NetworkHistory(count = newMap(head).count
+                  + merged(item).count)
                 recur(merged - item + tuple, tail)
               // if not, add a new element
               case None =>
@@ -184,14 +192,16 @@ object Mailthing {
     var result: Map[Network, NetworkHistory] = Map.empty
     source.getLines().foreach {
       case Pattern(addr, count) => result += (Network(addr) -> NetworkHistory(count = count.toInt))
-      case s@_ => println( s"Could not parse '$s'" )
+      case s@_ => println(s"Could not parse '$s'")
     }
     source.close()
     result
   }
 
   def main(args: Array[String]) {
-    case class Config(protocol: String = "imaps", server: String = "", username: String = "", password: String = "", folder: String = "", bits: Int = 23, importFile: Option[File] = None, dryRun: Boolean = false, ignoreHistory: Boolean = false)
+    case class Config(protocol: String = "imaps", server: String = "", username: String = "", password: String = "",
+                      folder: String = "", bits: Int = 23, importFile: Option[File] = None, dryRun: Boolean = false,
+                      ignoreHistory: Boolean = false)
     val parser = new scopt.OptionParser[Config]("mailthing") {
       opt[String]('p', "protocol") action { (x, c) =>
         c.copy(protocol = x)
@@ -199,21 +209,29 @@ object Mailthing {
         if (x matches "imaps?") success else failure("protocol option requires 'imap' or 'imaps'")
       } text "server protocol ('imap' or 'imaps', default 'imaps')"
       opt[String]('s', "server") action { (x, c) =>
-        c.copy(server = x) } text "server FQDN"
+        c.copy(server = x)
+      } text "server FQDN"
       opt[String]('u', "username") action { (x, c) =>
-        c.copy(username = x) } text "account name on server"
+        c.copy(username = x)
+      } text "account name on server"
       opt[String]('P', "password") action { (x, c) =>
-        c.copy(password = x) } text "account password"
+        c.copy(password = x)
+      } text "account password"
       opt[String]('f', "folder") action { (x, c) =>
-        c.copy(folder = x) } text "folder on server"
+        c.copy(folder = x)
+      } text "folder on server"
       opt[File]('i', "import") valueName "<file>" action { (x, c) =>
-        c.copy(importFile = Some(x)) } text "import contents of file"
+        c.copy(importFile = Some(x))
+      } text "import contents of file"
       opt[Int]('b', "bits") action { (x, c) =>
-        c.copy(bits = x) } text "CIDR bits to match (default is 23)"
+        c.copy(bits = x)
+      } text "CIDR bits to match (default is 23)"
       opt[Unit]('g', "ignoreHistory") action { (x, c) =>
-        c.copy(ignoreHistory = true) } text "Don't read history file"
+        c.copy(ignoreHistory = true)
+      } text "Don't read history file"
       opt[Unit]('d', "dryRun") action { (x, c) =>
-        c.copy(dryRun = true) } text "Dry run (don't save to history file)"
+        c.copy(dryRun = true)
+      } text "Dry run (don't save to history file)"
     }
 
     parser.parse(args, Config()) foreach { c =>
